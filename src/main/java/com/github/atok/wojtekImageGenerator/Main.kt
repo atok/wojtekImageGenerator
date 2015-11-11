@@ -1,21 +1,49 @@
 package com.github.atok.wojtekImageGenerator
+import org.apache.commons.cli.DefaultParser
+import org.apache.commons.cli.Options
 import org.apache.commons.collections4.queue.CircularFifoQueue
 import spark.Request
-import spark.Response
-import spark.Route
-import spark.Spark.*;
+import spark.Spark.get
+import spark.Spark.port
 import java.awt.Color
 import java.awt.Font
 import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
-import java.time.Clock
 import java.time.Instant
-import java.time.ZoneId
 import javax.imageio.ImageIO
 
+val logBufferSize = 100
+
 val font = Font(Font.MONOSPACED, Font.BOLD, 13)
+
+val options = Options()
+        .addOption("p", "port", true, "Http port of the server")
+
+val imageWidth = 600
+val imageHeight = 250
+
+fun main(args: Array<String>) {
+    val cmd = DefaultParser().parse(options, args)
+    val port = cmd.getOptionValue("p", "80").toInt()
+
+    port(port)
+
+    val log = CircularFifoQueue<Map<String, String>>(logBufferSize)
+
+    get("/image.png") { req, resp ->
+        resp.header("Content-Type", "image/png")
+        val data = exportRequestData(req)
+        log.add(data)
+        val imageText = data.map { "${it.key}: \n${it.value}" }.joinToString("\n\n")
+        generateImage(imageText, imageWidth, imageHeight)
+    }
+
+    get("/log") { req, resp ->
+        log.map { logItemToHtml(it) }.joinToString("\n<br/><br/>\n")
+    }
+}
 
 fun drawText(g: Graphics2D, text: String, font: Font, x: Int, y: Int) {
     val fontMetrics = g.fontMetrics
@@ -26,7 +54,6 @@ fun drawText(g: Graphics2D, text: String, font: Font, x: Int, y: Int) {
 
 fun drawLine(g: Graphics2D, text: String, font: Font, x: Int, y: Int) {
     val fontMetrics = g.fontMetrics
-    val textWidth = fontMetrics.stringWidth(text)
     val textHeight = fontMetrics.ascent
 
     g.drawString(text, x, textHeight + y)
@@ -65,23 +92,4 @@ fun logItemToHtml(item: Map<String, String>): String {
     return item.entries.map {
         "<b>${it.key}: </b></br><code>${it.value.replace("\n", "<br/>")}</code>"
     }.joinToString("<br/>")
-}
-
-fun main(args: Array<String>) {
-    val log = CircularFifoQueue<Map<String, String>>(100)
-
-    port(80)
-
-    get("/image.png") { req, resp ->
-        resp.header("Content-Type", "image/png")
-        val data = exportRequestData(req)
-        // "Time: ${time.atZone(ZoneId.of("UTC+1"))}\n\nHeaders: \n$headers\n\nIP: $ip"
-        log.add(data)
-        val imageText = data.map { "${it.key}: \n${it.value}" }.joinToString("\n\n")
-        generateImage(imageText, 600, 250)
-    }
-
-    get("/log") { req, resp ->
-        log.map { logItemToHtml(it) }.joinToString("\n<br/><br/>\n")
-    }
 }
