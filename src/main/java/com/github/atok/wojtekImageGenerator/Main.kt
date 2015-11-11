@@ -12,6 +12,7 @@ import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import java.util.*
 import javax.imageio.ImageIO
 
 val logBufferSize = 100
@@ -30,12 +31,13 @@ fun main(args: Array<String>) {
 
     port(port)
 
-    val log = CircularFifoQueue<Map<String, String>>(logBufferSize)
+    val log = Collections.synchronizedCollection(CircularFifoQueue<Map<String, String>>(logBufferSize))
 
     get("/image.png") { req, resp ->
         resp.header("Content-Type", "image/png")
         val data = exportRequestData(req)
         log.add(data)
+
         val imageText = data.map { "${it.key}: \n${it.value}" }.joinToString("\n\n")
         generateImage(imageText, imageWidth, imageHeight)
     }
